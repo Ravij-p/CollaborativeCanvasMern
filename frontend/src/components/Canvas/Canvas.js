@@ -4,6 +4,7 @@ import { AuthContext } from "../../context/AuthContext";
 import useSocket from "../../hooks/useSocket";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import api from "../../utils/api";
 
 GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
 
@@ -304,19 +305,21 @@ const Canvas = ({ roomId }) => {
     setTimeout(resizeCanvas, 300);
   };
 
-  const handlePDFUpload = (e) => {
+  const handlePDFUpload = async (e) => {
     const file = e.target.files[0];
-    if (file && file.type === "application/pdf") {
-      const url = URL.createObjectURL(file);
-      renderPDF(url); // local render
+    if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const arrayBuffer = reader.result;
-        socket.emit("pdf-uploaded", { buffer: arrayBuffer });
-      };
-      reader.readAsArrayBuffer(file);
-    }
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await api.post("/tools/upload-pdf", formData);
+    const pdfUrl = res.data.url;
+
+    // Broadcast via socket to others
+    socket.emit("pdf-uploaded", { roomId, url: pdfUrl });
+
+    // Render locally
+    renderPDF(pdfUrl);
   };
 
   const clearCanvas = () => {
@@ -382,11 +385,14 @@ const Canvas = ({ roomId }) => {
       const url = URL.createObjectURL(blob);
       renderPDF(url); // this MUST call full page render and resize canvas
     });
-
+    socket.on("pdf-received", ({ url }) => {
+      renderPDF(url);
+    });
     return () => {
       socket.off("draw");
       socket.off("clear-canvas");
       socket.off("pdf-uploaded");
+      socket.off("pdf-received");
     };
   }, [socket]);
 

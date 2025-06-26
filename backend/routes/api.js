@@ -6,7 +6,9 @@ const {
   summarizePPT,
   scrapeWebsite,
 } = require("../controllers/apiController");
+const { uploadPDF } = require("../controllers/apiController");
 
+router.post("/upload-pdf", upload.single("file"), uploadPDF);
 router.post(
   "/questions",
   upload.fields([{ name: "syllabus" }, { name: "pyqs" }]),

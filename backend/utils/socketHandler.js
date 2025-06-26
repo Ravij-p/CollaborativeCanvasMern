@@ -17,10 +17,8 @@ module.exports = (io) => {
       const roomId = users[socket.id]?.roomId;
       socket.to(roomId).emit("draw", data);
     });
-    socket.on("pdf-uploaded", ({ buffer }) => {
-      const user = users[socket.id];
-      if (!user || !user.roomId) return;
-      socket.to(user.roomId).emit("pdf-uploaded", { buffer });
+    socket.on("pdf-uploaded", ({ roomId, url }) => {
+      socket.to(roomId).emit("pdf-received", { url });
     });
 
     socket.on("disconnect", () => {

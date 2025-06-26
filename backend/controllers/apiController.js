@@ -44,3 +44,11 @@ exports.scrapeWebsite = async (req, res) => {
   );
   res.json(response.data);
 };
+exports.uploadPDF = (req, res) => {
+  const pdf = req.file;
+  if (!pdf) return res.status(400).json({ error: "No file uploaded" });
+
+  res.status(200).json({
+    url: pdf.path, // Cloudinary secure URL
+  });
+};
