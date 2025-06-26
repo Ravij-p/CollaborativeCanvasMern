@@ -1,0 +1,20 @@
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+canvas {
+  cursor: crosshair;
+}
+button {
+  background-color: #1f2937;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+input, textarea {
+  border: 1px solid #d1d5db;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  width: 100%;
+}
