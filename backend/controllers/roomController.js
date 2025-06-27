@@ -25,6 +25,20 @@ exports.joinRoom = async (req, res) => {
     res.status(500).json({ message: "Join failed" });
   }
 };
+exports.uploadPDF = async (req, res) => {
+  try {
+    const fileUrl = req.file.path; // Cloudinary URL from multer-storage-cloudinary
+    const roomId = req.body.roomId;
+
+    // Emit via socket to all in room
+    req.app.get("io").to(roomId).emit("pdf-received", { url: fileUrl });
+
+    res.json({ url: fileUrl });
+  } catch (error) {
+    console.error("PDF Upload Failed:", error);
+    res.status(500).json({ message: "Upload failed" });
+  }
+};
 
 exports.leaveRoom = async (req, res) => {
   try {

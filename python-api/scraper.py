@@ -1,25 +1,16 @@
+import sys
 import requests
 from bs4 import BeautifulSoup
 from newspaper import Article
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 import re
-
-router = APIRouter()
-
-class ScrapeRequest(BaseModel):
-    url: str
-
+sys.stdout.reconfigure(encoding='utf-8')
 def clean_html_text(html):
-    # Remove unnecessary whitespace and characters
     text = re.sub(r'\s+', ' ', html)
     text = text.replace('\xa0', ' ').strip()
     return text
 
 def extract_with_bs4(html):
     soup = BeautifulSoup(html, 'html.parser')
-
-    # Prioritize semantic tags
     content = soup.find('article') or soup.find('main')
 
     if not content:
@@ -41,31 +32,34 @@ def extract_with_newspaper(url):
     except Exception:
         return ""
 
-@router.post("/scrape-link")
-async def scrape_link(data: ScrapeRequest):
-    url = data.url
+def main():
+    if len(sys.argv) < 2:
+        print("Error: Missing URL")
+        sys.exit(1)
 
+    url = sys.argv[1]
     try:
         response = requests.get(url, timeout=10, headers={
             'User-Agent': 'Mozilla/5.0 (compatible; WebScraperBot/1.0)'
         })
 
         if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch page content")
+            print("Failed to fetch page content")
+            sys.exit(1)
 
-        # Try newspaper3k first
         text = extract_with_newspaper(url)
         if not text or len(text) < 100:
             text = extract_with_bs4(response.text)
 
         if not text or len(text) < 50:
-            raise HTTPException(status_code=422, detail="Unable to extract meaningful content from page")
+            print("Unable to extract meaningful content from page")
+            sys.exit(1)
 
-        return {
-            "url": url,
-            "length": len(text),
-            "content": text[:1500] + "..." if len(text) > 1500 else text
-        }
+        print(text)
 
     except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
+        print(f"Request failed: {str(e)}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

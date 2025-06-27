@@ -27,6 +27,10 @@ module.exports = (io) => {
     socket.on("pdf-uploaded", ({ roomId, url }) => {
       socket.to(roomId).emit("pdf-received", { url });
     });
+    socket.on("tool-output", (text) => {
+      const roomId = users[socket.id]?.roomId;
+      socket.to(roomId).emit("tool-output", text);
+    });
 
     socket.on("disconnect", () => {
       const user = users[socket.id];

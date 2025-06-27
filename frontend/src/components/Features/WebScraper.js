@@ -3,22 +3,34 @@ import api from "../../utils/api";
 
 const WebScraper = () => {
   const [url, setUrl] = useState("");
-  const [result, setResult] = useState("");
+  const [content, setContent] = useState("");
 
-  const scrape = async () => {
-    const res = await api.post("/tools/scrape", { url });
-    setResult(res.data.content);
+  const handleScrape = async () => {
+    try {
+      const res = await api.post("/api/scrape", { url });
+      setContent(res.data.content || res.data);
+    } catch (err) {
+      alert("Error scraping website");
+    }
   };
 
   return (
-    <div>
+    <div className="p-4">
+      <h2 className="text-xl font-semibold mb-4">Web Scraper</h2>
       <input
+        type="text"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="Paste URL"
+        placeholder="Enter website URL"
+        className="border px-2 py-1 w-full"
       />
-      <button onClick={scrape}>Scrape</button>
-      <pre>{result}</pre>
+      <button
+        onClick={handleScrape}
+        className="mt-2 bg-purple-500 px-4 py-2 text-white"
+      >
+        Scrape
+      </button>
+      {content && <pre className="mt-4 whitespace-pre-wrap">{content}</pre>}
     </div>
   );
 };

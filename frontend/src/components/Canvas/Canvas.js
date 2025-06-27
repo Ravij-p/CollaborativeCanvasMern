@@ -6,13 +6,16 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { useNavigate } from "react-router-dom";
 import api from "../../utils/api"; // your axios instance
-
+import ToolboxPanel from "./ToolboxPanel";
 GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
 
 const Canvas = ({ roomId }) => {
   const canvasRef = useRef(null);
   const scrollRef = useRef(null);
   const pdfRef = useRef(null);
+  const [toolboxOpen, setToolboxOpen] = useState(false);
+
+  const toolsOutputRef = useRef(null);
   const { user } = useContext(AuthContext);
   const socket = useSocket(roomId, user);
   const [penSize, setPenSize] = useState(2);
@@ -27,6 +30,8 @@ const Canvas = ({ roomId }) => {
   const [pdfDoc, setPdfDoc] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [redoStack, setRedoStack] = useState([]);
+  const [toolOutput, setToolOutput] = useState("");
+  const outputRef = useRef();
   const navigate = useNavigate();
   const getCoords = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -357,7 +362,54 @@ const Canvas = ({ roomId }) => {
       pdf.save(`canvas-${roomId}.pdf`);
     });
   };
+  const handleChange = (e) => {
+    const text = e.target.value;
+    setToolOutput(text);
+    socket.emit("tool-output", text);
+  };
+  const handleQuestionGenerate = async () => {
+    const formData = new FormData();
+    formData.append(
+      "syllabus",
+      new Blob(["Sample syllabus"], { type: "text/plain" })
+    );
+    formData.append(
+      "pyqs",
+      new Blob(["Sample previous questions"], { type: "text/plain" })
+    );
+    const res = await api.post("/questions", formData);
+    setToolOutput(res.data.output || res.data);
+    socket.emit("tool-output", res.data.output || res.data);
+  };
+  const handleSummarize = async () => {
+    const formData = new FormData();
+    formData.append(
+      "file",
+      new Blob(["Dummy PPTX"], {
+        type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      })
+    );
+    const res = await api.post("/summarize", formData);
+    setToolOutput(res.data.summary || res.data);
+    socket.emit("tool-output", res.data.summary || res.data);
+  };
 
+  const handleScrape = async () => {
+    const res = await api.post("/scrape", { url: "https://example.com" });
+    setToolOutput(res.data.content || res.data);
+    socket.emit("tool-output", res.data.content || res.data);
+  };
+
+  const saveOutputAsPDF = () => {
+    html2canvas(outputRef.current).then((canvas) => {
+      const img = canvas.toDataURL("image/png");
+      const pdf = new jsPDF();
+      const width = pdf.internal.pageSize.getWidth();
+      const height = (canvas.height * width) / canvas.width;
+      pdf.addImage(img, "PNG", 0, 0, width, height);
+      pdf.save("tools-output.pdf");
+    });
+  };
   const expandCanvas = () => {
     setExtraHeight((prev) => {
       const newHeight = prev + 1000;
@@ -397,6 +449,9 @@ const Canvas = ({ roomId }) => {
     socket.on("pdf-received", ({ url }) => {
       renderPDF(url);
     });
+    socket.on("tool-output", (text) => {
+      setToolOutput(text);
+    });
     socket.on("room-closed", () => {
       alert("Room owner left. Redirecting...");
       navigate("/home"); // or "/rooms" depending on your route
@@ -407,6 +462,7 @@ const Canvas = ({ roomId }) => {
       socket.off("pdf-uploaded");
       socket.off("pdf-received");
       socket.off("room-closed");
+      socket.off("tool-output");
     };
   }, [socket]);
 
@@ -530,6 +586,19 @@ const Canvas = ({ roomId }) => {
         <button onClick={saveAsPNG}>🖼️ PNG</button>
         <button onClick={saveAsPDF}>📄 PDF</button>
         <input type="file" accept=".pdf" onChange={handlePDFUpload} />
+        <button
+          onClick={() => setToolboxOpen((prev) => !prev)}
+          className="fixed bottom-20 right-6 bg-purple-600 text-white px-4 py-2 rounded shadow-lg z-50"
+        >
+          🧰 Tools
+        </button>
+
+        <ToolboxPanel
+          visible={toolboxOpen}
+          onClose={() => setToolboxOpen(false)}
+          socket={socket}
+          roomId={roomId}
+        />
       </div>
 
       <div

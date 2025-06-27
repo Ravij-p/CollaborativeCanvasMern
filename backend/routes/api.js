@@ -1,14 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const upload = require("../middleware/upload");
+
+const { uploadPDF } = require("../controllers/roomController");
+
+router.post("/upload-pdf", upload.single("file"), uploadPDF);
+
 const {
   generateQuestions,
   summarizePPT,
   scrapeWebsite,
 } = require("../controllers/apiController");
-const { uploadPDF } = require("../controllers/apiController");
 
-router.post("/upload-pdf", upload.single("file"), uploadPDF);
 router.post(
   "/questions",
   upload.fields([{ name: "syllabus" }, { name: "pyqs" }]),

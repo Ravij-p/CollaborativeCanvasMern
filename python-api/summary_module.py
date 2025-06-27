@@ -1,71 +1,102 @@
-import requests
-from bs4 import BeautifulSoup
-from newspaper import Article
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+import os
+import json
 import re
+import sys
+import unicodedata
+from pptx import Presentation
+from transformers import pipeline
 
-router = APIRouter()
+# Force UTF-8 output
+sys.stdout.reconfigure(encoding='utf-8')
 
-class ScrapeRequest(BaseModel):
-    url: str
+def clean_text(text):
+    text = unicodedata.normalize("NFKC", text)
+    text = text.replace("\xa0", " ")
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
-def clean_html_text(html):
-    # Remove unnecessary whitespace and characters
-    text = re.sub(r'\s+', ' ', html)
-    text = text.replace('\xa0', ' ').strip()
-    return text
+def extract_text_and_images(pptx_path, output_dir="output"):
+    prs = Presentation(pptx_path)
+    os.makedirs(output_dir, exist_ok=True)
+    slides = []
 
-def extract_with_bs4(html):
-    soup = BeautifulSoup(html, 'html.parser')
+    for i, slide in enumerate(prs.slides):
+        text_list = []
+        image_path = None
 
-    # Prioritize semantic tags
-    content = soup.find('article') or soup.find('main')
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                cleaned = clean_text(shape.text)
+                if cleaned:
+                    text_list.append(cleaned)
 
-    if not content:
-        paragraphs = soup.find_all('p')
-        if not paragraphs:
-            return ""
-        content = "\n".join(p.get_text() for p in paragraphs)
-    else:
-        content = content.get_text()
+            if shape.shape_type == 13:  # Picture
+                image = shape.image
+                ext = image.ext
+                img_name = f"slide_{i+1}_img.{ext}"
+                img_path = os.path.join(output_dir, img_name)
+                with open(img_path, "wb") as f:
+                    f.write(image.blob)
+                image_path = img_name
 
-    return clean_html_text(content)
-
-def extract_with_newspaper(url):
-    try:
-        article = Article(url)
-        article.download()
-        article.parse()
-        return article.text
-    except Exception:
-        return ""
-
-@router.post("/scrape-link")
-async def scrape_link(data: ScrapeRequest):
-    url = data.url
-
-    try:
-        response = requests.get(url, timeout=10, headers={
-            'User-Agent': 'Mozilla/5.0 (compatible; WebScraperBot/1.0)'
+        full_text = "\n".join(text_list)
+        slides.append({
+            "slide_number": i + 1,
+            "text": full_text,
+            "word_count": len(full_text.split()),
+            "image_path": image_path
         })
 
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch page content")
+    return slides
 
-        # Try newspaper3k first
-        text = extract_with_newspaper(url)
-        if not text or len(text) < 100:
-            text = extract_with_bs4(response.text)
+def create_batches(slides, min_words=100):
+    batches = []
+    batch = []
+    word_total = 0
 
-        if not text or len(text) < 50:
-            raise HTTPException(status_code=422, detail="Unable to extract meaningful content from page")
+    for slide in slides:
+        batch.append(slide)
+        word_total += slide["word_count"]
 
-        return {
-            "url": url,
-            "length": len(text),
-            "content": text[:1500] + "..." if len(text) > 1500 else text
-        }
+        if word_total >= min_words:
+            batches.append(batch)
+            batch = []
+            word_total = 0
 
-    except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
+    if batch:
+        batches.append(batch)
+
+    return batches
+
+def summarize_batches(batches):
+    summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+    results = []
+
+    for batch in batches:
+        combined_text = "\n".join(s["text"] for s in batch if s["text"])
+        if len(combined_text.split()) < 50:
+            continue
+
+        summary = summarizer(combined_text, max_length=300, min_length=100, do_sample=False)[0]["summary_text"]
+        results.append({
+            "slide": [batch[0]["slide_number"], batch[-1]["slide_number"]],
+            "summary": summary.strip(),
+            "image": [s["image_path"] for s in batch if s["image_path"]]
+        })
+
+    return results
+
+def main():
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "No file path provided"}))
+        return
+
+    pptx_path = sys.argv[1]
+    slides = extract_text_and_images(pptx_path)
+    batches = create_batches(slides)
+    summaries = summarize_batches(batches)
+
+    print(json.dumps(summaries, ensure_ascii=False))
+
+if __name__ == "__main__":
+    main()
