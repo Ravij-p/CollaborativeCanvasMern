@@ -4,7 +4,8 @@ import { AuthContext } from "../../context/AuthContext";
 import useSocket from "../../hooks/useSocket";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import api from "../../utils/api";
+import { useNavigate } from "react-router-dom";
+import api from "../../utils/api"; // your axios instance
 
 GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
 
@@ -26,8 +27,7 @@ const Canvas = ({ roomId }) => {
   const [pdfDoc, setPdfDoc] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [redoStack, setRedoStack] = useState([]);
-
-  // Get mouse position relative to canvas + scroll
+  const navigate = useNavigate();
   const getCoords = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     const scrollTop = scrollRef.current.scrollTop;
@@ -35,6 +35,15 @@ const Canvas = ({ roomId }) => {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top, // ✅ critical
     };
+  };
+  const handleLeaveRoom = async () => {
+    try {
+      await api.post(`/rooms/${roomId}/leave`);
+      navigate("/home"); // or "/rooms"
+    } catch (err) {
+      console.error("Error leaving room:", err);
+      alert("Failed to leave room");
+    }
   };
 
   const interpolatePoints = (x0, y0, x1, y1, steps = 10) => {
@@ -388,11 +397,16 @@ const Canvas = ({ roomId }) => {
     socket.on("pdf-received", ({ url }) => {
       renderPDF(url);
     });
+    socket.on("room-closed", () => {
+      alert("Room owner left. Redirecting...");
+      navigate("/home"); // or "/rooms" depending on your route
+    });
     return () => {
       socket.off("draw");
       socket.off("clear-canvas");
       socket.off("pdf-uploaded");
       socket.off("pdf-received");
+      socket.off("room-closed");
     };
   }, [socket]);
 
@@ -550,6 +564,12 @@ const Canvas = ({ roomId }) => {
         className="mt-4 bg-blue-600 text-white px-4 py-2 rounded"
       >
         ➕ Expand Canvas
+      </button>
+      <button
+        onClick={handleLeaveRoom}
+        className="bg-red-500 text-white px-4 py-2 rounded ml-auto"
+      >
+        🚪 Leave Room
       </button>
     </div>
   );

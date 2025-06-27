@@ -27,14 +27,23 @@ exports.joinRoom = async (req, res) => {
 };
 
 exports.leaveRoom = async (req, res) => {
-  const room = await Room.findById(req.params.id);
-  room.users = room.users.filter((u) => u !== req.user.username);
+  try {
+    const room = await Room.findById(req.params.id);
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
 
-  if (room.owner === req.user.username || room.users.length === 0) {
-    await Room.findByIdAndDelete(req.params.id);
-    return res.json({ deleted: true });
+    room.users = room.users.filter((u) => u !== req.user.username);
+
+    if (room.owner === req.user.username || room.users.length === 0) {
+      await Room.findByIdAndDelete(req.params.id);
+      return res.json({ deleted: true });
+    }
+
+    await room.save();
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Leave Room Error:", err);
+    res.status(500).json({ message: "Failed to leave room" });
   }
-
-  await room.save();
-  res.json({ success: true });
 };

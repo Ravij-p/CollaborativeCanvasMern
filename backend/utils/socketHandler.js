@@ -1,11 +1,17 @@
 module.exports = (io) => {
   const users = {}; // socket.id -> { roomId, username }
   const roomUsers = {}; // roomId -> Set of usernames
+  const roomOwners = {}; // roomId -> owner username
 
   io.on("connection", (socket) => {
     socket.on("join-room", ({ roomId, username }) => {
       socket.join(roomId);
       users[socket.id] = { roomId, username };
+
+      // ✅ Assign owner
+      if (!roomOwners[roomId]) {
+        roomOwners[roomId] = username;
+      }
 
       if (!roomUsers[roomId]) roomUsers[roomId] = new Set();
       roomUsers[roomId].add(username);
@@ -17,6 +23,7 @@ module.exports = (io) => {
       const roomId = users[socket.id]?.roomId;
       socket.to(roomId).emit("draw", data);
     });
+
     socket.on("pdf-uploaded", ({ roomId, url }) => {
       socket.to(roomId).emit("pdf-received", { url });
     });
@@ -25,11 +32,14 @@ module.exports = (io) => {
       const user = users[socket.id];
       if (user) {
         const { roomId, username } = user;
-        roomUsers[roomId]?.delete(username);
+        socket.to(roomId).emit("user-left", username);
 
-        if (roomUsers[roomId]?.size === 0) delete roomUsers[roomId];
+        // ✅ Notify if room owner disconnects
+        if (username === roomOwners[roomId]) {
+          io.to(roomId).emit("room-closed");
+          delete roomOwners[roomId];
+        }
 
-        io.to(roomId).emit("user-list", Array.from(roomUsers[roomId] || []));
         delete users[socket.id];
       }
     });
