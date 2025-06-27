@@ -1,0 +1,13 @@
+# For PDF and PPT parsing
+PyPDF2
+python-pptx
+
+# For scraping
+newspaper3k
+lxml[html_clean]
+
+# For summarization (if needed)
+
+
+# Optional utilities
+requests
